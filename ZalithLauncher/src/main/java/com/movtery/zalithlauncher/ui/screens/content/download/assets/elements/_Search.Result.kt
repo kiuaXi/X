@@ -78,7 +78,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.movtery.zalithlauncher.R
+import com.movtery.zalithlauncher.game.download.assets.favorites.FavoriteManager
+import com.movtery.zalithlauncher.game.download.assets.favorites.toFavorite
 import com.movtery.zalithlauncher.game.download.assets.platform.Platform
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformClasses
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformDisplayLabel
@@ -91,6 +94,8 @@ import com.movtery.zalithlauncher.ui.AndroidStringText
 import com.movtery.zalithlauncher.ui.buildAppendedText
 import com.movtery.zalithlauncher.ui.components.ScalingLabel
 import com.movtery.zalithlauncher.ui.components.SmallOutlinedEditField
+import com.movtery.zalithlauncher.ui.screens.content.download.assets.favorites.FavoriteAction
+import com.movtery.zalithlauncher.ui.screens.content.download.assets.favorites.FavoriteToggleButton
 import com.movtery.zalithlauncher.ui.screens.content.elements.backgroundGlass
 import com.movtery.zalithlauncher.ui.theme.cardColor
 import com.movtery.zalithlauncher.ui.theme.onCardColor
@@ -361,6 +366,7 @@ private fun ResultList(
     swapToDownload: (Platform, projectId: String, iconUrl: String?) -> Unit = { _, _, _ -> }
 ) {
     val context = LocalContext.current
+    val favorites by FavoriteManager.assets.collectAsStateWithLifecycle()
     LazyColumn(
         modifier = modifier,
         state = state,
@@ -368,6 +374,7 @@ private fun ResultList(
     ) {
         items(data) { (item, mcmod) ->
             val platform = remember(item) { item.platform() }
+            val projectId = remember(item) { item.platformId() }
             val title = remember(item) { item.platformTitle() }
             val description = remember(item) { item.platformDescription() }
             val iconUrl = remember(item) { item.platformIconUrl() }
@@ -376,6 +383,22 @@ private fun ResultList(
             val follows = remember(item) { item.platformFollows() }
             val modloaders = remember(item) { item.platformModLoaders() }
             val categories = remember(item, classes) { item.platformCategories(classes) }
+
+            val isFavorite = remember(favorites, projectId, platform) {
+                FavoriteManager.isProjectFavorite(platform, projectId)
+            }
+            val favoriteAction = remember(isFavorite, item, classes) {
+                FavoriteAction(
+                    isFavorite = isFavorite,
+                    onToggle = {
+                        if (isFavorite) {
+                            FavoriteManager.removeProject(platform, projectId)
+                        } else {
+                            FavoriteManager.save(item.toFavorite(classes = classes))
+                        }
+                    }
+                )
+            }
 
             ResultProjectLayout(
                 modifier = Modifier
@@ -390,8 +413,9 @@ private fun ResultList(
                 follows = follows,
                 modloaders = modloaders,
                 categories = categories?.sortedWith { o1, o2 -> o1.index() - o2.index() },
+                favoriteAction = favoriteAction,
                 onClick = {
-                    swapToDownload(platform, item.platformId(), iconUrl)
+                    swapToDownload(platform, projectId, iconUrl)
                 }
             )
         }
@@ -416,6 +440,7 @@ fun ResultProjectLayout(
     color: Color = cardColor(influencedByBackground),
     contentColor: Color = onCardColor(),
     blur: Int = AllSettings.backgroundBlur.state,
+    favoriteAction: FavoriteAction? = null,
     onClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -454,7 +479,8 @@ fun ResultProjectLayout(
                 ProjectTitleHead(
                     platform = platform,
                     title = title,
-                    author = author
+                    author = author,
+                    favoriteAction = favoriteAction
                 )
 
                 Row(
@@ -556,7 +582,8 @@ fun ProjectTitleHead(
     modifier: Modifier = Modifier,
     platform: Platform,
     title: String,
-    author: String?
+    author: String?,
+    favoriteAction: FavoriteAction? = null
 ) {
     //标题栏、作者栏、平台标签
     Row(
@@ -594,6 +621,10 @@ fun ProjectTitleHead(
                     maxLines = 1
                 )
             }
+        }
+        //收藏按钮
+        favoriteAction?.let {
+            FavoriteToggleButton(favoriteAction = it)
         }
         //平台标签
         PlatformIdentifier(platform = platform)
